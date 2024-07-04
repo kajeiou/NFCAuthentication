@@ -3,6 +3,7 @@ import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View, ActivityIndicat
 import NfcManager, { NfcTech, Ndef  } from 'react-native-nfc-manager';
 import { generatePinCode } from '../../utils/Generate';
 import UserService from '../../services/UserService';
+import {  Badge,Card } from '@rneui/themed';
 import IconMat from 'react-native-vector-icons/MaterialCommunityIcons';
 NfcManager.start();
 
@@ -14,6 +15,7 @@ function NfcScreen() {
   const [nfcRequesting, setNfcRequesting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [countdown, setCountdown] = useState(0);
 
   useEffect(() => {
     NfcManager.isSupported()
@@ -57,32 +59,22 @@ function NfcScreen() {
 
       if (tag.ndefMessage && tag.ndefMessage.length > 0) {
         const ndefRecords = tag.ndefMessage;
-
-        console.log("ici")
-        console.log(ndefRecords[0].payload)
-        console.log("ici2")
-
-        if (ndefRecords[0].payload) {
-          let textPayload;
-          
+        if (ndefRecords[0].payload) {          
           try {
-            textPayload = Ndef.text.decodePayload(ndefRecords[0].payload);
+            setNfcTag(Ndef.text.decodePayload(ndefRecords[0].payload));
             const pin = generatePinCode();
             setPinCode(pin);
+            console.log(pinCode)
             console.log("PIN généré : " + pin);
             try {
-              //await UserService.sendNfcData(textPayload, pin);
+              await UserService.sendNfcData(nfcTag, pin);
               startCountdown();
             } catch (error) {
               showErrorAlert("Erreur lors de l'envoi des données NFC.");
             }
-
-            startCountdown();
           } catch (error) {
             throw new Error("Erreur lors du décodage du payload NFC.");
           }
-          console.log("Contenu de la carte NFC :", textPayload);
-          Alert.alert('Contenu de la carte NFC', `Contenu du tag : ${textPayload}`);
         } else {
           showErrorAlert("Le décodage de la carte a échoué.");
         }
@@ -102,9 +94,17 @@ function NfcScreen() {
   };
 
   const startCountdown = () => {
-    setTimeout(() => {
-      setPinCode(null);
-    }, 15000);
+    setCountdown(60);
+    const countdownInterval = setInterval(() => {
+      setCountdown(prevCountdown => {
+        if (prevCountdown <= 1) {
+          clearInterval(countdownInterval);
+          setPinCode(null); 
+          return 0;
+        }
+        return prevCountdown - 1;
+      });
+    }, 1000);
   };
 
   const showErrorAlert = (message) => {
@@ -159,16 +159,32 @@ function NfcScreen() {
         </View>
       )}
 
-      {nfcTag && (
+      {nfcTag && pinCode !== null && countdown > 0 && (
         <View style={styles.tagContainer}>
-          {pinCode !== null && (
             <>
-              <Text style={styles.tagTitle}>Code PIN :</Text>
-              <Text style={styles.pinCode}>{pinCode}</Text>
-              
+              <Card containerStyle={{}} wrapperStyle={{}}>
+              <Card.Title>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.titleText}>Code PIN</Text>
+                  <Text style={styles.pinCode}>{pinCode}</Text>
+                </View>
+              </Card.Title>
+              <Card.Divider />
+                <View
+                  style={{
+                    position: "relative",
+                    alignItems: "center"
+                  }}
+                >
+                  <Text style={styles.tagContent}>Expiration prévue</Text>
+                  <Text>{countdown}s</Text>
+                </View>
+              </Card>
             </>
-          )}
+
+        
         </View>
+        
       )}
     </View>
   );
@@ -195,6 +211,7 @@ const styles = StyleSheet.create({
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding:15
   },
   buttonText: {
     color: 'white',
@@ -240,9 +257,10 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 14,
   },
+  
   pinCode: {
     marginTop: 5,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#3b5998',
   },
@@ -257,6 +275,7 @@ const styles = StyleSheet.create({
     color: 'red',
     textAlign: 'center',
   },
+
 });
 
 export default NfcScreen;
